@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>우리반 미덕 점수판</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f0f8ff;
+      padding: 40px;
+    }
+    .virtue {
+      display: inline-block;
+      background: #fff;
+      padding: 20px;
+      margin: 10px;
+      border-radius: 12px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.1);
+      width: 200px;
+    }
+    .score {
+      font-size: 2em;
+      margin: 10px 0;
+    }
+    button {
+      margin: 5px;
+      padding: 6px 14px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      background: #4b7bec;
+      color: white;
+    }
+    button:hover {
+      background: #3867d6;
+    }
+    #total {
+      font-size: 1.5em;
+      margin-top: 30px;
+    }
+    #reset-btn {
+      margin-top: 20px;
+      background: #d63031;
+    }
+    #reset-btn:hover {
+      background: #c0392b;
+    }
+    #chart-container {
+      width: 80%;
+      margin: 30px auto;
+    }
+    #congrats {
+      display: none;
+      font-size: 1.4em;
+      color: #e17055;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>우리반 미덕 점수판</h1>
+  <div id="board"></div>
+
+  <div id="total">총점: 0점</div>
+  <div id="congrats">🎉 축하합니다! 우리 반이 100점을 달성했어요! 🎉</div>
+  <button id="reset-btn" onclick="resetScores()">점수 초기화</button>
+
+  <div id="chart-container">
+    <canvas id="scoreChart"></canvas>
+  </div>
+
+  <script>
+    const apiUrl = "https://sheet.best/api/sheets/1ed14d84-f18c-4ab1-89db-8f7602c740c0";
+    const apiKey = "Ix!9VLLtY7yj_WOiVzn7FZjNzMRe0qv3v26j!$UU7!od_J%7Hjp@sekCTNK#ac54";
+    let virtues = [];
+
+    async function loadData() {
+      try {
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+        virtues = data;
+        render();
+        updateTotal();
+        drawChart();
+      } catch (err) {
+        alert("데이터를 불러올 수 없습니다.");
+        console.error(err);
+      }
+    }
+
+    function render() {
+      const board = document.getElementById("board");
+      board.innerHTML = "";
+      virtues.forEach(({ 미덕, 점수 }) => {
+        const container = document.createElement("div");
+        container.className = "virtue";
+        container.innerHTML = `
+          <h3>${미덕}</h3>
+          <div class="score" id="${미덕}-score">${점수}</div>
+          <button onclick="changeScore('${미덕}', 1)">＋</button>
+          <button onclick="changeScore('${미덕}', -1)">－</button>
+        `;
+        board.appendChild(container);
+      });
+    }
+
+    function changeScore(name, delta) {
+      const scoreEl = document.getElementById(`${name}-score`);
+      let score = parseInt(scoreEl.textContent);
+      score = Math.max(0, score + delta);
+      scoreEl.textContent = score;
+      updateTotal();
+      saveData();
+      drawChart();
+    }
+
+    function updateTotal() {
+      const total = virtues.reduce((sum, { 미덕 }) => {
+        const val = parseInt(document.getElementById(`${미덕}-score`).textContent);
+        return sum + val;
+      }, 0);
+      document.getElementById("total").textContent = `총점: ${total}점`;
+
+      const congratsEl = document.getElementById("congrats");
+      if (total >= 100) {
+        congratsEl.style.display = "block";
+      } else {
+        congratsEl.style.display = "none";
+      }
+    }
+
+    async function saveData() {
+      for (const { 미덕 } of virtues) {
+        const score = parseInt(document.getElementById(`${미덕}-score`).textContent);
+        await fetch(`${apiUrl}/search`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-KEY": apiKey
+          },
+          body: JSON.stringify({
+            "미덕": 미덕,
+            "점수": score
+          })
+        });
+      }
+    }
+
+    function resetScores() {
+      virtues.forEach(({ 미덕 }) => {
+        document.getElementById(`${미덕}-score`).textContent = "0";
+      });
+      updateTotal();
+      saveData();
+      drawChart();
+    }
+
+    let chart;
+
+    function drawChart() {
+      const labels = virtues.map(v => v["미덕"]);
+      const scores = virtues.map(v =>
+        parseInt(document.getElementById(`${v["미덕"]}-score`).textContent)
+      );
+
+      const ctx = document.getElementById('scoreChart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '미덕별 점수',
+            data: scores,
+            borderWidth: 1
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true,
+              precision: 0
+            }
+          }
+        }
+      });
+    }
+
+    window.onload = loadData;
+  </script>
+</body>
+</html>
